@@ -227,9 +227,10 @@ clears the prior `is_default` row for that flow type and sets the new one in
 the same transaction, so the partial unique index is never violated mid-write.
 `update_default_provider` (CHAT), `update_default_vision_provider` (checks
 `model_supports_image_input` first), `update_default_chat_naming_provider`,
-and `update_default_craft_provider` (creates the `LLMModelFlow` row first via
+and `update_default_craft_provider` all call it. The chat-naming and Craft
+setters create the `LLMModelFlow` row first via
 `create_new_flow_mapping__no_commit`, because nothing else ever populates a
-CRAFT-flow row) all call it. `fetch_existing_models(db_session, flow_types)`
+CHAT_NAMING or CRAFT row. `fetch_existing_models(db_session, flow_types)`
 returns every `ModelConfiguration` that has an `LLMModelFlow` row matching any
 flow type in the list.
 
@@ -502,10 +503,9 @@ See `backend/AGENTS.md` for authoritative commands and required env
   `get_default_llm` raise (`"No default LLM model found"`) while others
   (`fetch_default_chat_naming_model`) return `None` and the caller must decide
   the fallback. Check the specific caller before assuming a flow is
-  populated. Craft in particular is what `db/llm.py:update_default_craft_provider`
-  calls a "pointer flow, not a capability": nothing populates a CRAFT
-  `LLMModelFlow` row automatically, so it must be created explicitly before it
-  can be defaulted.
+  populated. Craft and chat naming are what `db/llm.py` calls "pointer flows,
+  not capabilities": nothing populates a CRAFT or CHAT_NAMING `LLMModelFlow`
+  row automatically, so their setters create it before setting the default.
 - **Retry semantics are asymmetric before and after the first chunk.** Before
   any content streams, a transient error retries transparently. After even
   one chunk has reached the caller, the same error propagates as a hard
