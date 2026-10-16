@@ -10866,6 +10866,11 @@
         },
         "public": {
           "label": "Público para a sua organização"
+        },
+        "upload": {
+          "imageUnsupported": {
+            "toast": "O modelo atual não aceita imagens. Selecione um modelo com suporte a visão."
+          }
         }
       }
     },

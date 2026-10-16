@@ -10866,6 +10866,11 @@
         },
         "public": {
           "label": "对您的组织公开"
+        },
+        "upload": {
+          "imageUnsupported": {
+            "toast": "当前模型不支持图片输入。请选择支持视觉的模型。"
+          }
         }
       }
     },
