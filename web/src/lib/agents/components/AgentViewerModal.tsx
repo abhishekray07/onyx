@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { FullAgent } from "@/lib/agents/types";
@@ -35,7 +35,12 @@ import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
-import { getDisplayName } from "@/lib/languageModels/utils";
+import {
+  getDisplayName,
+  getFinalLLM,
+  modelSupportsImageInput,
+} from "@/lib/languageModels/utils";
+import { toast } from "@opal/layouts";
 import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
@@ -128,16 +133,62 @@ interface AgentChatInputProps {
   onSubmit: (message: string) => void;
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
+  const t = useTranslations("agents.modals.viewer");
   const llmManager = useLlmManager(undefined, agent);
   // Over the listing, so the URL says nothing about the chat this would
   // start; the agent is named here instead.
   const toolConfiguration = useToolConfiguration(agent.id);
+  const { beginUpload, setCurrentMessageFiles } = useProjectsContext();
+
+  // Uploads go to the shared message files, which the chat page attaches to
+  // the message it sends on load. Tracked by temp_id, which survives the
+  // upload replacing the optimistic file's id.
+  const uploadedTempIdsRef = useRef<Set<string>>(new Set());
+  const submittedRef = useRef(false);
+
+  const handleFileUpload = useCallback(
+    async (files: File[]) => {
+      const llmProviders = llmManager.llmProviders ?? [];
+      const [, llmModel] = getFinalLLM(
+        llmProviders,
+        agent,
+        llmManager.currentLlm
+      );
+      const hasImages = files.some((file) => file.type.startsWith("image/"));
+      if (hasImages && !modelSupportsImageInput(llmProviders, llmModel)) {
+        toast.error(t("upload.imageUnsupported.toast"));
+        return;
+      }
+
+      const uploaded = await beginUpload(files, null);
+      for (const file of uploaded) {
+        if (file.temp_id) uploadedTempIdsRef.current.add(file.temp_id);
+      }
+      setCurrentMessageFiles((prev) => [...prev, ...uploaded]);
+    },
+    [agent, llmManager, beginUpload, setCurrentMessageFiles, t]
+  );
+
+  // Closing the viewer without sending takes its uploads back out, so they
+  // do not appear in the next chat.
+  useEffect(() => {
+    const uploadedTempIds = uploadedTempIdsRef.current;
+    return () => {
+      if (submittedRef.current || uploadedTempIds.size === 0) return;
+      setCurrentMessageFiles((prev) =>
+        prev.filter(
+          (file) => !file.temp_id || !uploadedTempIds.has(file.temp_id)
+        )
+      );
+    };
+  }, [setCurrentMessageFiles]);
 
   // This send navigates in order to send, so the configuration is left where
   // that page will find it rather than travelling with the call. Closing the
   // viewer without sending leaves nothing behind.
   const submit = useCallback(
     (message: string) => {
+      submittedRef.current = true;
       toolConfiguration.handOffToNewChatWith(agent.id);
       onSubmit(message);
     },
@@ -154,7 +205,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       chatState="input"
       activeAgent={agent}
       stopGenerating={() => {}}
-      handleFileUpload={() => {}}
+      handleFileUpload={handleFileUpload}
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}

@@ -10866,6 +10866,11 @@
         },
         "public": {
           "label": "Öffentlich für Ihre Organisation"
+        },
+        "upload": {
+          "imageUnsupported": {
+            "toast": "Das aktuelle Modell unterstützt keine Bildeingabe. Wähle ein Modell mit Bildverarbeitung."
+          }
         }
       }
     },
